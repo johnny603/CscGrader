@@ -13,6 +13,18 @@ dependencies = []
 [project.scripts]
 cscgrader = "cscgrader_cli:main"
 
+[tool.setuptools]
+py-modules = ["cscgrader_cli"]
+
+[tool.setuptools.packages.find]
+include = [
+    "assignment*",
+    "compilation*",
+    "detection*",
+    "execution*",
+    "results*"
+]
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
 addopts = "-q"
