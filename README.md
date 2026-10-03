@@ -1,45 +1,13 @@
 # CscGrader
 
-CscGrader is a language-agnostic command-line tool for CS instructors and TAs.
-It detects student project language, runs build/compile steps when needed, executes submissions with timeouts, captures structured evidence, and leaves final grading to a human reviewer.
+CscGrader is a language-agnostic evidence-collection tool for CS instructors and TAs.
+It detects student submissions, compiles/builds them when required, executes them with timeout controls, captures structured results, and prepares output for **human review**.
 
-## Intended Use
+CscGrader does **not** auto-grade or assign scores.
 
-CscGrader is for **evidence collection**, not automatic scoring.
+## Workflow
 
-Workflow:
-
-1. Detection
-2. Compilation / Build
-3. Execution
-4. Structured Results
-5. Human Review
-
-Human review is always required.
-
-## Supported Languages (Initial)
-
-- Java
-- Python
-- C
-- C++
-- JavaScript
-- TypeScript
-- Go
-- Rust
-- C#
-
-## Architecture
-
-Top-level modules:
-
-- `/detection` - language and entrypoint detection
-- `/compilation` - language adapter registry and build service
-- `/execution` - execution backend and execution service
-- `/results` - normalized result models and pipeline orchestration
-- `/tests` - unit tests
-
-Language-specific logic is isolated in adapters (`compilation/adapters.py`) so the core pipeline avoids language `if/elif` branching.
+Student Submission → Detection → Compilation/Build → Execution → Results/Evidence → Human Review
 
 ## Installation
 
@@ -47,140 +15,113 @@ Language-specific logic is isolated in adapters (`compilation/adapters.py`) so t
 python -m pip install -e .
 ```
 
-## CLI Usage
+## CLI
 
 ```bash
-cscgrader detect <submission>
-cscgrader build <submission>
-cscgrader run <submission>
-cscgrader process <submission>
-cscgrader process <submissions-directory>
+cscgrader detect <submission> [--entrypoint <entrypoint-or-class>]
+cscgrader build <submission> [--entrypoint <entrypoint-or-class>] [--timeout 30]
+cscgrader run <submission> [--entrypoint <entrypoint-or-class>] [--timeout 5] [--input test-input.txt]
+cscgrader process <submission|submissions-directory> [--assignment profile.json] [--input test-input.txt]
+cscgrader batch <submissions-directory> [--assignment profile.json] [--input test-input.txt]
 ```
 
-Optional timeouts:
+`process`/`batch` always save machine-readable JSON evidence per submission/part.
 
-```bash
-cscgrader build <submission> --timeout 30
-cscgrader run <submission> --timeout 5
-cscgrader process <path> --build-timeout 30 --run-timeout 5 --output-dir results
-```
+## Assignment Profiles (Reusable)
 
-`process` runs:
-
-`detect -> build -> execute -> save results`
-
-If build fails, execution is skipped and the build failure is recorded.
-For batch directories, each student is processed independently; one failure does not stop the rest.
-
-## Result Format (JSON)
-
-Example shape:
+Assignment profiles are JSON and are not hard-coded to a specific course.
 
 ```json
 {
-  "submission": "StudentName",
-  "language": "java",
-  "entrypoint": "Main.java",
-  "detection_status": "detected",
-  "overall_status": "execution_success",
-  "build": {
-    "status": "success",
-    "command": "javac Main.java",
-    "stdout": "",
-    "stderr": "",
-    "exit_code": 0,
-    "duration_ms": 100,
-    "timed_out": false
-  },
-  "execution": {
-    "status": "success",
-    "command": "java Main",
-    "stdout": "Hello",
-    "stderr": "",
-    "exit_code": 0,
-    "duration_ms": 80,
-    "timed_out": false
-  },
-  "requires_human_review": true
+  "name": "CSC 215 Assignment 03",
+  "parts": [
+    {"name": "Part A", "entrypoint": "BMI_CSC215_English_{student}.java"},
+    {"name": "Part B", "entrypoint": "BMI_CSC215_Metric_{student}.java"},
+    {
+      "name": "Part C",
+      "entrypoint": "BMI_CSC215_MASTER_{student}.java",
+      "dependencies": [
+        "BMI_CSC215_English_{student}.java",
+        "BMI_CSC215_Metric_{student}.java"
+      ]
+    }
+  ]
 }
 ```
 
-Statuses include:
-
-- `detected`
-- `unsupported`
-- `build_success`
-- `build_failed`
-- `execution_success`
-- `execution_failed`
-- `timeout`
-- `detection_failed`
-
-## Examples
-
-### Java submission
+Run:
 
 ```bash
-cscgrader process /path/to/StudentJava
+cscgrader process ./KeshviDobariya-Assignment-03 --assignment ./csc215-assignment-03.json
 ```
 
-Expected build command pattern:
+## Java Improvements
 
-```text
-javac <all .java files>
-```
+- Discovers all Java files recursively.
+- Detects all classes/files containing `public static void main`.
+- Reports all candidate entrypoints.
+- Uses assignment-configured entrypoint when provided.
+- Avoids silently choosing arbitrary entrypoints when multiple candidates exist.
+- Compiles multi-file Java submissions using all discovered `.java` files.
+- Emits diagnostics for common discovery/build/runtime failure categories.
 
-Execution command pattern:
+## Deterministic stdin
 
-```text
-java <detected-main-class>
-```
-
-### Python submission
+Provide test input for interactive programs:
 
 ```bash
-cscgrader process /path/to/StudentPython
+cscgrader run ./StudentSubmission --input test-input.txt
 ```
 
-Build step is explicitly skipped.
-Execution command pattern:
+Captured evidence includes input used, stdout/stderr, exit code, duration, and timeout.
 
-```text
-python main.py
-```
+## Human-readable summary + JSON evidence
 
-### Failed compilation
+`process`/`batch` print concise per-student/part summaries and diagnostics (for TA workflow), while JSON files retain full evidence for later tooling.
 
-For a C submission with compile errors, CscGrader records compiler stderr and sets `overall_status` to `build_failed` without executing the program.
+## Diagnostics (examples)
 
-## Adding a New Language Adapter
+Discovery:
+- no Java files found
+- multiple possible entrypoints (human selection required)
+- expected class/entrypoint not found
 
-1. Add an adapter implementing:
-   - `requires_build()`
-   - `build_command(submission_dir, entrypoint)`
-   - `run_command(submission_dir, entrypoint)`
-2. Register it in `AdapterRegistry`.
-3. Extend detection in `detection/service.py`.
-4. Add tests in `/tests` for detection and command generation.
+Compilation:
+- syntax error
+- cannot find symbol
+- missing dependency/package
+- public class/filename mismatch
+
+Runtime:
+- ClassNotFoundException
+- NoSuchMethodError
+- NoSuchElementException (likely insufficient stdin when input is supplied)
+- InputMismatchException
+- uncaught exception
+- non-zero exit code
+- timeout
+
+Environment/IDE signal:
+- when source compiles/runs successfully in terminal, CscGrader reports that remaining failures are likely IDE project/classpath/run-configuration issues.
+
+## Architecture
+
+- `detection/` for language and entrypoint discovery
+- `compilation/` for language adapters and build commands
+- `execution/` for execution backend abstraction and local runner
+- `results/` for normalized models, diagnostics, and pipeline orchestration
+- `assignment/` for reusable assignment profiles
+
+Language behavior remains modular through adapters/registry.
+
+## Security / limitations
+
+Student code is untrusted. Current local runner is for development only.
+Production deployments should use an isolated sandbox/container backend with strict resource limits.
+Timeout enforcement is built in and should remain enabled.
 
 ## Testing
-
-Run tests with:
 
 ```bash
 pytest
 ```
-
-## Security and Sandboxing Notes
-
-Student submissions are untrusted code.
-
-This initial implementation separates host orchestration from execution (`ExecutionBackend` interface), and includes timeout handling and explicit working-directory control.
-
-For production use, replace local execution with isolated sandbox/container execution plus resource limits.
-
-## Current Limitations
-
-- Entrypoint detection uses practical heuristics and may not cover every project layout.
-- Local runner executes on host machine (intended to be replaced by a sandbox backend for production).
-- Build/run commands are representative defaults and may require adapter extension for course-specific frameworks.

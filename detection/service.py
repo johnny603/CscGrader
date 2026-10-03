@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+import re
 
 from results.models import Status
 
@@ -20,6 +21,9 @@ LANG_EXTENSIONS = {
     "csharp": {".cs"},
 }
 
+MAIN_METHOD_RE = re.compile(r"public\s+static\s+void\s+main\s*\(")
+CLASS_RE = re.compile(r"\bclass\s+([A-Za-z_][A-Za-z0-9_]*)")
+
 
 @dataclass
 class DetectionResult:
@@ -29,13 +33,16 @@ class DetectionResult:
     language: str | None = None
     project_type: str | None = None
     entrypoint: str | None = None
+    entrypoints: list[str] = field(default_factory=list)
     message: str | None = None
+    requires_human_selection: bool = False
+    discovered_files: list[str] = field(default_factory=list)
 
 
 class Detector:
     """Detect language, project type, and likely entrypoint."""
 
-    def detect(self, submission_dir: str | Path) -> DetectionResult:
+    def detect(self, submission_dir: str | Path, preferred_entrypoint: str | None = None) -> DetectionResult:
         root = Path(submission_dir).resolve()
         if not root.exists() or not root.is_dir():
             return DetectionResult(
@@ -49,6 +56,9 @@ class Detector:
                 status=Status.UNSUPPORTED.value,
                 message="Unable to confidently detect supported language.",
             )
+
+        if language == "java":
+            return self._detect_java(root, preferred_entrypoint=preferred_entrypoint)
 
         entrypoint = self._detect_entrypoint(root, language)
         if entrypoint is None:
@@ -64,8 +74,133 @@ class Detector:
             language=language,
             project_type=language,
             entrypoint=entrypoint,
+            entrypoints=[entrypoint],
             message="Detection successful.",
         )
+
+    def _detect_java(self, root: Path, preferred_entrypoint: str | None = None) -> DetectionResult:
+        java_files = sorted(
+            str(path.relative_to(root)) for path in root.rglob("*.java") if path.is_file() and not self._is_hidden(path)
+        )
+        if not java_files:
+            return DetectionResult(
+                status=Status.DETECTION_FAILED.value,
+                language="java",
+                project_type="java",
+                message="No Java files found.",
+                discovered_files=[],
+            )
+
+        entrypoint_candidates = self._discover_java_entrypoints(root, java_files)
+        if not entrypoint_candidates:
+            return DetectionResult(
+                status=Status.DETECTION_FAILED.value,
+                language="java",
+                project_type="java",
+                message="Java files found but no class with public static void main was detected.",
+                discovered_files=java_files,
+            )
+
+        if preferred_entrypoint:
+            matched = self._match_preferred_entrypoint(preferred_entrypoint, entrypoint_candidates)
+            if matched:
+                return DetectionResult(
+                    status=Status.DETECTED.value,
+                    language="java",
+                    project_type="java",
+                    entrypoint=matched,
+                    entrypoints=entrypoint_candidates,
+                    discovered_files=java_files,
+                    message="Detection successful with assignment-preferred entrypoint.",
+                )
+            return DetectionResult(
+                status=Status.DETECTION_FAILED.value,
+                language="java",
+                project_type="java",
+                entrypoints=entrypoint_candidates,
+                discovered_files=java_files,
+                message=f"Expected class/entrypoint not found: {preferred_entrypoint}",
+            )
+
+        if len(entrypoint_candidates) == 1:
+            selected = entrypoint_candidates[0]
+            return DetectionResult(
+                status=Status.DETECTED.value,
+                language="java",
+                project_type="java",
+                entrypoint=selected,
+                entrypoints=entrypoint_candidates,
+                discovered_files=java_files,
+                message="Detection successful.",
+            )
+
+        heuristic_selected = self._select_java_entrypoint_heuristically(entrypoint_candidates)
+        if heuristic_selected:
+            return DetectionResult(
+                status=Status.DETECTED.value,
+                language="java",
+                project_type="java",
+                entrypoint=heuristic_selected,
+                entrypoints=entrypoint_candidates,
+                discovered_files=java_files,
+                message="Multiple Java entrypoints found; selected using strong heuristic (master/main naming).",
+            )
+
+        return DetectionResult(
+            status=Status.DETECTION_FAILED.value,
+            language="java",
+            project_type="java",
+            entrypoints=entrypoint_candidates,
+            discovered_files=java_files,
+            requires_human_selection=True,
+            message="Multiple Java entrypoints found; human selection required.",
+        )
+
+    @staticmethod
+    def _discover_java_entrypoints(root: Path, java_files: list[str]) -> list[str]:
+        candidates: list[str] = []
+        for rel_path in java_files:
+            path = root / rel_path
+            text = Detector._safe_read(path)
+            if MAIN_METHOD_RE.search(text):
+                candidates.append(rel_path)
+        return sorted(candidates)
+
+    @staticmethod
+    def _match_preferred_entrypoint(preferred: str, entrypoints: list[str]) -> str | None:
+        normalized = preferred.replace("\\", "/")
+        preferred_class = Path(normalized).stem
+        for candidate in entrypoints:
+            if candidate == normalized:
+                return candidate
+            if Path(candidate).name == normalized:
+                return candidate
+            if Path(candidate).stem == preferred_class:
+                return candidate
+        return None
+
+    @staticmethod
+    def _select_java_entrypoint_heuristically(entrypoints: list[str]) -> str | None:
+        ranked: list[tuple[int, str]] = []
+        for entrypoint in entrypoints:
+            name = Path(entrypoint).stem.lower()
+            score = 0
+            if "master" in name:
+                score += 4
+            if name == "main":
+                score += 3
+            if name.endswith("main"):
+                score += 2
+            if "test" in name:
+                score -= 4
+            ranked.append((score, entrypoint))
+
+        ranked.sort(reverse=True)
+        if not ranked or ranked[0][0] <= 0:
+            return None
+        if len(ranked) > 1 and ranked[0][0] == ranked[1][0]:
+            return None
+        return ranked[0][1]
 
     def _detect_language(self, root: Path) -> str | None:
         metadata_map = {
@@ -99,14 +234,6 @@ class Detector:
         return best_language
 
     def _detect_entrypoint(self, root: Path, language: str) -> str | None:
-        if language == "java":
-            candidates = list(root.rglob("*.java"))
-            for candidate in candidates:
-                text = self._safe_read(candidate)
-                if "public static void main" in text:
-                    return str(candidate.relative_to(root))
-            return None
-
         if language == "python":
             for name in ("main.py", "app.py", "__main__.py"):
                 p = root / name

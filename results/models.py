@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any
 
@@ -21,6 +21,16 @@ class Status(str, Enum):
 
 
 @dataclass
+class Diagnostic:
+    """Human-focused diagnostic evidence."""
+
+    category: str
+    code: str
+    message: str
+    likely: bool = False
+
+
+@dataclass
 class CommandResult:
     """Captured output for a command execution."""
 
@@ -31,6 +41,7 @@ class CommandResult:
     exit_code: int | None
     duration_ms: int
     timed_out: bool = False
+    input_used: str | None = None
 
 
 @dataclass
@@ -42,8 +53,13 @@ class SubmissionResult:
     entrypoint: str | None
     detection_status: str
     overall_status: str
+    assignment: str | None = None
+    part: str | None = None
+    detected_entrypoints: list[str] = field(default_factory=list)
     build: CommandResult | None = None
     execution: CommandResult | None = None
+    diagnostics: list[Diagnostic] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
     requires_human_review: bool = True
 
     def to_dict(self) -> dict[str, Any]:

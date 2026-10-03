@@ -21,6 +21,8 @@ class ExecutionService:
         submission_dir: Path,
         entrypoint: str,
         timeout_seconds: int,
+        stdin_input: str | None = None,
+        command_override: list[str] | None = None,
     ) -> CommandResult:
-        command = adapter.run_command(submission_dir, entrypoint)
-        return self.runner.run(command, submission_dir, timeout_seconds)
+        command = command_override or adapter.run_command(submission_dir, entrypoint)
+        return self.runner.run(command, submission_dir, timeout_seconds, stdin_input=stdin_input)

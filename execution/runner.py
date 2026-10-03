@@ -18,6 +18,7 @@ class ExecutionBackend(Protocol):
         cwd: Path,
         timeout_seconds: int,
         env: dict[str, str] | None = None,
+        stdin_input: str | None = None,
     ) -> CommandResult: ...
 
 
@@ -30,6 +31,7 @@ class LocalProcessRunner:
         cwd: Path,
         timeout_seconds: int,
         env: dict[str, str] | None = None,
+        stdin_input: str | None = None,
     ) -> CommandResult:
         merged_env = os.environ.copy()
         if env:
@@ -45,6 +47,7 @@ class LocalProcessRunner:
                 text=True,
                 timeout=timeout_seconds,
                 check=False,
+                input=stdin_input,
             )
             duration_ms = int((time.perf_counter() - start) * 1000)
             return CommandResult(
@@ -55,15 +58,31 @@ class LocalProcessRunner:
                 exit_code=proc.returncode,
                 duration_ms=duration_ms,
                 timed_out=False,
+                input_used=stdin_input,
             )
         except subprocess.TimeoutExpired as exc:
             duration_ms = int((time.perf_counter() - start) * 1000)
+            stdout = exc.stdout if isinstance(exc.stdout, str) else (exc.stdout.decode("utf-8", "ignore") if exc.stdout else "")
+            stderr = exc.stderr if isinstance(exc.stderr, str) else (exc.stderr.decode("utf-8", "ignore") if exc.stderr else "")
             return CommandResult(
                 status="timeout",
                 command=" ".join(command),
-                stdout=exc.stdout or "",
-                stderr=exc.stderr or "",
+                stdout=stdout,
+                stderr=stderr,
                 exit_code=None,
                 duration_ms=duration_ms,
                 timed_out=True,
+                input_used=stdin_input,
+            )
+        except FileNotFoundError as exc:
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            return CommandResult(
+                status="failed",
+                command=" ".join(command),
+                stdout="",
+                stderr=str(exc),
+                exit_code=127,
+                duration_ms=duration_ms,
+                timed_out=False,
+                input_used=stdin_input,
             )

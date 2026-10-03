@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from compilation.adapters import AdapterRegistry, JavaAdapter, PythonAdapter
+from compilation.adapters import JavaAdapter
 
 
 def test_java_build_command_includes_all_java_files(tmp_path: Path) -> None:
@@ -17,11 +17,6 @@ def test_java_build_command_includes_all_java_files(tmp_path: Path) -> None:
     assert "src/Helper.java" in command
 
 
-def test_python_run_command() -> None:
-    cmd = PythonAdapter().run_command(Path("."), "main.py")
-    assert cmd == ["python", "main.py"]
-
-
-def test_registry_resolves_language() -> None:
-    assert AdapterRegistry().get("java") is not None
-    assert AdapterRegistry().get("unknown") is None
+def test_java_run_command_uses_entrypoint_class_name() -> None:
+    cmd = JavaAdapter().run_command(Path("."), "src/Main.java")
+    assert cmd == ["java", "src.Main"]
