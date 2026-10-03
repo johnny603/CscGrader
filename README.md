@@ -125,3 +125,20 @@ Timeout enforcement is built in and should remain enabled.
 ```bash
 pytest
 ```
+
+### Built-in dummy submission smoke test
+
+The repository includes a first-class Java fixture at:
+
+- `tests/fixtures/dummy_submission/`
+- `tests/fixtures/dummy_submission_assignment.json`
+
+Quick smoke workflow after clone/install:
+
+```bash
+cscgrader process tests/fixtures/dummy_submission \
+  --assignment tests/fixtures/dummy_submission_assignment.json \
+  --output-dir /tmp/cscgrader-smoke-results
+```
+
+This validates assignment-aware Java discovery, multi-file compilation, execution with stdin, concise summary output, and JSON evidence generation before processing real student submissions.
