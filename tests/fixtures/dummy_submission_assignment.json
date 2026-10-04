@@ -1,32 +1,5 @@
 {
   "name": "Dummy CSC 215 Assignment",
-  "parts": [
-    {
-      "name": "Part A",
-      "entrypoint": "BMI_CSC215_English_{student}.java",
-      "input_text": "180\n70\n"
-    },
-    {
-      "name": "Part B",
-      "entrypoint": "BMI_CSC215_Metric_{student}.java",
-      "input_text": "81.65\n1.78\n"
-    },
-    {
-      "name": "Part C",
-      "entrypoint": "BMI_CSC215_MASTER_{student}.java",
-      "dependencies": [
-        "BMI_CSC215_English_{student}.java",
-        "BMI_CSC215_Metric_{student}.java"
-      ],
-      "input_file": "master_input.txt"
-    }
-  ]
-}
-
-
-
-{
-  "name": "Dummy CSC 215 Assignment",
   "student_identifier": "DummyStudent",
   "parts": [
     {"name": "Part A", "entrypoint": "BMI_CSC215_English_{student}.java"},
