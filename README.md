@@ -123,7 +123,8 @@ Timeout enforcement is built in and should remain enabled.
 ## Testing
 
 ```bash
-pytest
+python -m pip install -e ".[dev]"
+python -m pytest
 ```
 
 ### Built-in dummy submission smoke test
