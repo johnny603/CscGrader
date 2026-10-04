@@ -13,6 +13,8 @@ class AssignmentPart:
     entrypoint: str
     dependencies: list[str] = field(default_factory=list)
     timeout_seconds: int | None = None
+    input_text: str | None = None       # ADDED
+    run_command: str | None = None      # ADDED
 
 
 @dataclass
@@ -27,7 +29,7 @@ class AssignmentProfile:
 
         Precedence:
           1. profile.student_identifier (explicit)
-          2. inferred from a *_<StudentId>.java file (fixture convention)
+          2. inferred from a BMI_CSC215_*_<StudentId>.java file
           3. submission directory name (legacy)
         """
         if self.student_identifier:
@@ -48,6 +50,8 @@ class ResolvedAssignmentPart:
     name: str
     entrypoint: str
     dependencies: list[str] = field(default_factory=list)
+    input_text: str | None = None       # ADDED: pipeline.py reads part.input_text
+    run_command: str | None = None      # ADDED: pipeline.py reads part.run_command
 
 
 @dataclass
@@ -59,7 +63,9 @@ class ResolvedAssignment:
 
 class AssignmentProfileLoader:
     @staticmethod
-    def load(path: str | Path) -> AssignmentProfile:
+    def load(path: str | Path | None) -> AssignmentProfile | None:
+        if path is None:                            # ADDED: tolerate assignment=None
+            return None                             # ADDED
         path = Path(path)
         data = json.loads(path.read_text(encoding="utf-8"))
         parts = [
@@ -68,6 +74,8 @@ class AssignmentProfileLoader:
                 entrypoint=p["entrypoint"],
                 dependencies=list(p.get("dependencies", [])),
                 timeout_seconds=p.get("timeout_seconds"),
+                input_text=p.get("input_text"),     # ADDED
+                run_command=p.get("run_command"),   # ADDED
             )
             for p in data["parts"]
         ]
@@ -77,9 +85,9 @@ class AssignmentProfileLoader:
             student_identifier=data.get("student_identifier"),  # ADDED
         )
 
-    # ADDED
+    # ADDED: renamed from `resolve` to match results/pipeline.py:164
     @staticmethod
-    def resolve(
+    def resolve_for_submission(
         profile: AssignmentProfile,
         submission_path: str | Path,
     ) -> ResolvedAssignment:
@@ -96,6 +104,8 @@ class AssignmentProfileLoader:
                     name=part.name,
                     entrypoint=entrypoint,
                     dependencies=dependencies,
+                    input_text=part.input_text,         # ADDED
+                    run_command=part.run_command,       # ADDED
                 )
             )
         return ResolvedAssignment(
@@ -107,6 +117,4 @@ class AssignmentProfileLoader:
 
 def infer_student_token(submission_name: str) -> str:
     """Legacy fallback: derive a student token from a submission name."""
-    # Preserve the existing behavior of the original function.
-    # This is only the last-resort fallback in AssignmentProfile.resolve_student.
     return submission_name
