@@ -28,3 +28,11 @@ include = [
 [tool.pytest.ini_options]
 pythonpath = ["."]
 addopts = "-q"
+
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools]
+packages = ["assignment", "compilation", "detection", "execution", "results"]
+py-modules = ["cscgrader_cli"]
