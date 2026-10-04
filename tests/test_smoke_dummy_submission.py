@@ -42,17 +42,15 @@ def smoke_output(tmp_path_factory):
 
 def test_smoke_produces_json(smoke_output):
     out_dir, _ = smoke_output
-    files = list(out_dir.glob("*.json"))
-    assert files, "no JSON evidence produced"
+    assert list(out_dir.glob("*.json")), "no JSON evidence produced"
 
 
 def test_no_detection_failures(smoke_output):
     out_dir, _ = smoke_output
     for path in out_dir.glob("*.json"):
         result = json.loads(path.read_text())
-        assert result["overall_status"] != "detection_failed", result  # CHANGED
+        assert result["overall_status"] != "detection_failed", result
         messages = [d["message"] for d in result.get("diagnostics", [])]
-        # CHANGED: the directory-derived token must never leak into diagnostics.
         assert not any("dummysubmission" in m for m in messages), messages
 
 
@@ -63,4 +61,4 @@ def test_entrypoints_use_dummystudent(smoke_output):
         result = json.loads(path.read_text())
         for name in result.get("detected_entrypoints", []):
             seen.add(Path(name).name)
-    assert EXPECTED_ENTRYPOINTS.issubset(seen), seen  # CHANGED
+    assert EXPECTED_ENTRYPOINTS.issubset(seen), seen
