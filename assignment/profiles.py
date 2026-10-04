@@ -13,17 +13,16 @@ class AssignmentPart:
     entrypoint: str
     dependencies: list[str] = field(default_factory=list)
     timeout_seconds: int | None = None
-    input_text: str | None = None       # ADDED
-    run_command: str | None = None      # ADDED
+    input_text: str | None = None        # ADDED
+    run_command: str | None = None       # ADDED
 
 
 @dataclass
 class AssignmentProfile:
     name: str
     parts: list[AssignmentPart]
-    student_identifier: str | None = None  # ADDED
+    student_identifier: str | None = None
 
-    # ADDED
     def resolve_student(self, submission_path: str | Path) -> str:
         """Resolve the {student} token used in entrypoint templates.
 
@@ -38,7 +37,7 @@ class AssignmentProfile:
         root = Path(submission_path)
         for name in sorted(p.name for p in root.glob("*.java")):
             if name.startswith("BMI_CSC215_") and name.endswith(".java"):
-                stem = name[len("BMI_CSC215_"):-len(".java")]  # English_DummyStudent
+                stem = name[len("BMI_CSC215_"):-len(".java")]
                 if "_" in stem:
                     return stem.split("_", 1)[1]
 
@@ -50,22 +49,22 @@ class ResolvedAssignmentPart:
     name: str
     entrypoint: str
     dependencies: list[str] = field(default_factory=list)
-    input_text: str | None = None       # ADDED: pipeline.py reads part.input_text
-    run_command: str | None = None      # ADDED: pipeline.py reads part.run_command
+    input_text: str | None = None        # ADDED
+    run_command: str | None = None       # ADDED
 
 
 @dataclass
 class ResolvedAssignment:
     name: str
     parts: list[ResolvedAssignmentPart]
-    student: str | None = None  # ADDED
+    student: str | None = None
 
 
 class AssignmentProfileLoader:
     @staticmethod
     def load(path: str | Path | None) -> AssignmentProfile | None:
-        if path is None:                            # ADDED: tolerate assignment=None
-            return None                             # ADDED
+        if path is None:
+            return None
         path = Path(path)
         data = json.loads(path.read_text(encoding="utf-8"))
         parts = [
@@ -82,10 +81,9 @@ class AssignmentProfileLoader:
         return AssignmentProfile(
             name=data["name"],
             parts=parts,
-            student_identifier=data.get("student_identifier"),  # ADDED
+            student_identifier=data.get("student_identifier"),
         )
 
-    # ADDED: renamed from `resolve` to match results/pipeline.py:164
     @staticmethod
     def resolve_for_submission(
         profile: AssignmentProfile,
